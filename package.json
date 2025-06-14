@@ -1,0 +1,33 @@
+{
+  "name": "mmm-pospotify",
+  "version": "2.0.0",
+  "description": "A modern, minimalist Spotify module for MagicMirror² with customizable features",
+  "main": "MMM-POSpotify.js",
+  "scripts": {
+    "auth": "echo 'Starting authorization server...' && node auth-server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rxf-sys/MMM-POSpotify.git"
+  },
+  "keywords": [
+    "magic mirror",
+    "module",
+    "spotify",
+    "music",
+    "now playing",
+    "minimalist"
+  ],
+  "author": "Robin Frank",
+  "license": "MIT",
+  "dependencies": {
+    "spotify-web-api-node": "^5.0.2",
+    "express": "^4.18.2",
+    "querystring": "^0.2.1"
+  },
+  "devDependencies": {},
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}

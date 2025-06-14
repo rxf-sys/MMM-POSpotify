@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MMM-POSpotify Authorization</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: #191414;
+            color: #FFFFFF;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 600px;
+            width: 100%;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+        }
+        
+        .logo {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .logo svg {
+            width: 60px;
+            height: 60px;
+        }
+        
+        h1 {
+            text-align: center;
+            font-size: 28px;
+            margin-bottom: 10px;
+            color: #1DB954;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #B3B3B3;
+            margin-bottom: 40px;
+        }
+        
+        .steps {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            padding: 30px;
+            margin-bottom: 30px;
+        }
+        
+        .step {
+            margin-bottom: 25px;
+            position: relative;
+            padding-left: 35px;
+        }
+        
+        .step:last-child {
+            margin-bottom: 0;
+        }
+        
+        .step-number {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 25px;
+            height: 25px;
+            background: #1DB954;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 14px;
+        }
+        
+        .step h3 {
+            font-size: 18px;
+            margin-bottom: 8px;
+            color: #FFFFFF;
+        }
+        
+        .step p {
+            color: #B3B3B3;
+            line-height: 1.6;
+        }
+        
+        .step a {
+            color: #1DB954;
+            text-decoration: none;
+            border-bottom: 1px solid transparent;
+            transition: border-color 0.3s;
+        }
+        
+        .step a:hover {
+            border-bottom-color: #1DB954;
+        }
+        
+        .code-block {
+            background: #000;
+            border: 1px solid #333;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 10px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            overflow-x: auto;
+        }
+        
+        .code-block code {
+            color: #1DB954;
+        }
+        
+        .button-container {
+            text-align: center;
+            margin-top: 30px;
+        }
+        
+        .auth-button {
+            display: inline-block;
+            background: #1DB954;
+            color: #191414;
+            padding: 15px 40px;
+            border-radius: 30px;
+            text-decoration: none;
+            font-weight: bold;
+            font-size: 16px;
+            transition: all 0.3s;
+            border: none;
+            cursor: pointer;
+        }
+        
+        .auth-button:hover {
+            background: #1ED760;
+            transform: scale(1.05);
+            box-shadow: 0 5px 20px rgba(29, 185, 84, 0.4);
+        }
+        
+        .auth-button:disabled {
+            background: #535353;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .warning {
+            background: rgba(226, 33, 52, 0.1);
+            border: 1px solid #E22134;
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 20px;
+            color: #FFB3B3;
+        }
+        
+        .success {
+            background: rgba(29, 185, 84, 0.1);
+            border: 1px solid #1DB954;
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 20px;
+            color: #B3FFD1;
+        }
+        
+        .info-box {
+            background: rgba(29, 185, 84, 0.1);
+            border-left: 4px solid #1DB954;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 0 5px 5px 0;
+        }
+        
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid transparent;
+            border-top-color: #191414;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+            vertical-align: middle;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .hidden {
+            display: none;
+        }
+        
+        /* Responsive design */
+        @media (max-width: 600px) {
+            .container {
+                padding: 30px 20px;
+            }
+            
+            h1 {
+                font-size: 24px;
+            }
+            
+            .steps {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">
+            <svg viewBox="0 0 1134 340">
+                <path fill="#1DB954" d="M8 171c0 92 76 168 168 168s168-76 168-168S268 4 176 4 8 79 8 171zm230 78c-39-24-71-56-71-56s36 70 122 70c31 0 56-11 56-11s-23-11-69-11c-3 0-6 0-9 0-36 0-68-15-68-15s36 38 122 38c46 0 83-15 83-15s-37-15-92-15c-7 0-15 0-22 1-52 0-94-31-94-31s50 56 158 56c62 0 112-20 112-20s-50-20-118-20c-14 0-27 1-40 2-82 0-143-61-143-61s75 91 215 91c70 0 126-26 126-26s-56-26-141-26c-35 0-68 5-99 14z"/>
+            </svg>
+        </div>
+        
+        <h1>MMM-POSpotify</h1>
+        <p class="subtitle">Modern Spotify Module for MagicMirror²</p>
+        
+        <div class="steps">
+            <div class="step">
+                <div class="step-number">1</div>
+                <h3>Create a Spotify App</h3>
+                <p>
+                    Visit the <a href="https://developer.spotify.com/dashboard/applications" target="_blank">Spotify Developer Dashboard</a>
+                    and create a new app. Use these settings:
+                </p>
+                <div class="code-block">
+                    App name: <code>MagicMirror POSpotify</code><br>
+                    App description: <code>Personal MagicMirror Spotify Display</code><br>
+                    Redirect URI: <code>http://127.0.0.1:8100/callback</code>
+                </div>
+                <p><strong>Important:</strong> Use exactly <code>127.0.0.1</code> (not localhost) for security compliance!</p>
+            </div>
+            
+            <div class="step">
+                <div class="step-number">2</div>
+                <h3>Configure the Module</h3>
+                <p>
+                    Add your Spotify app credentials to your MagicMirror config:
+                </p>
+                <div class="code-block">
+{
+    module: "MMM-POSpotify",
+    position: "top_right",
+    config: {
+        clientID: "<code>YOUR_CLIENT_ID</code>",
+        clientSecret: "<code>YOUR_CLIENT_SECRET</code>",
+        // Other options...
+    }
+}
+                </div>
+            </div>
+            
+            <div class="step">
+                <div class="step-number">3</div>
+                <h3>Authorize Your Account</h3>
+                <p>
+                    Click the button below to connect your Spotify account. You'll be redirected to Spotify to grant permissions.
+                </p>
+                <div class="info-box">
+                    <strong>Permissions requested:</strong> Read playback state, control playback, view currently playing track
+                </div>
+            </div>
+        </div>
+        
+        <div class="button-container">
+            <button class="auth-button" onclick="startAuthorization()" id="authButton">
+                Connect with Spotify
+            </button>
+        </div>
+        
+        <div id="message"></div>
+    </div>
+    
+    <script>
+        function startAuthorization() {
+            const button = document.getElementById('authButton');
+            const messageDiv = document.getElementById('message');
+            
+            // Check if module is configured
+            button.innerHTML = 'Connecting<span class="spinner"></span>';
+            button.disabled = true;
+            
+            // Redirect to authorization endpoint
+            window.location.href = '/authorize';
+        }
+        
+        // Check for error in URL params
+        const urlParams = new URLSearchParams(window.location.search);
+        const error = urlParams.get('error');
+        
+        if (error) {
+            const messageDiv = document.getElementById('message');
+            messageDiv.innerHTML = `<div class="warning">Authorization failed: ${error}</div>`;
+        }
+        
+        // Auto-detect if running on MagicMirror
+        if (window.location.hostname === '127.0.0.1' && window.location.port === '8100') {
+            const messageDiv = document.getElementById('message');
+            messageDiv.innerHTML = `<div class="success">✓ Authorization server is running correctly</div>`;
+        }
+    </script>
+</body>
+</html>
