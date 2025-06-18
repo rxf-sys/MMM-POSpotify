@@ -1,7 +1,7 @@
 /* MMM-POSpotify.js
- * 
+ *
  * A modern, minimalist Spotify module for MagicMirror²
- * 
+ *
  * By: Robin Frank
  * MIT Licensed.
  */
@@ -11,13 +11,13 @@ Module.register("MMM-POSpotify", {
         updateInterval: 1000,           // Update every second
         animationSpeed: 500,            // Fade animation speed
         displayType: "minimalist",      // minimalist, detailed, compact, coverOnly
-        
+
         // Authentication
         clientID: "",
         clientSecret: "",
         accessToken: "",
         refreshToken: "",
-        
+
         // Display options
         showAlbumArt: true,
         albumArtSize: 200,              // Size in pixels
@@ -26,20 +26,20 @@ Module.register("MMM-POSpotify", {
         showDeviceIcon: true,
         showSpotifyLogo: true,
         logoSize: 30,                   // Logo size in pixels
-        
+
         // Theming
         theme: "dark",                  // dark, light, auto, glass
         accentColor: "#1DB954",         // Spotify green default
         useAlbumColors: false,          // Extract colors from album art
         backgroundBlur: true,           // Blur background behind module
-        
+
         // Text options
         showArtistFirst: false,         // Show artist before song title
         maxTitleLength: 30,             // Max characters before truncation
         maxArtistLength: 25,
         scrollLongText: true,           // Scroll long text
         fontSize: "medium",             // small, medium, large
-        
+
         // Advanced features
         showPlaybackControls: false,    // Show play/pause/skip buttons
         enableNotifications: true,      // Send notifications to other modules
@@ -48,7 +48,7 @@ Module.register("MMM-POSpotify", {
         showVisualization: false,       // Audio visualization
         fadeWhenInactive: true,         // Fade out when not playing
         inactivityTimeout: 30000,       // Time before fading (ms)
-        
+
         // Performance
         lowPowerMode: false,            // Reduce update frequency
         cacheAlbumArt: true,           // Cache album covers
@@ -73,7 +73,7 @@ Module.register("MMM-POSpotify", {
     // Start module
     start: function() {
         Log.info("Starting module: " + this.name);
-        
+
         this.currentSong = null;
         this.previousSong = null;
         this.isPlaying = false;
@@ -81,14 +81,14 @@ Module.register("MMM-POSpotify", {
         this.inactivityTimer = null;
         this.albumColors = null;
         this.spotifyApi = null;
-        
+
         // Validate config
         if (!this.config.clientID || !this.config.clientSecret) {
             Log.error("MMM-POSpotify: Missing Spotify credentials!");
             this.showError("Missing Spotify credentials");
             return;
         }
-        
+
         // Initialize module
         this.sendSocketNotification("INIT", {
             clientID: this.config.clientID,
@@ -96,20 +96,20 @@ Module.register("MMM-POSpotify", {
             accessToken: this.config.accessToken,
             refreshToken: this.config.refreshToken
         });
-        
+
         // Start update cycle
         this.scheduleUpdate();
-        
+
         // Apply theme
         this.applyTheme();
     },
 
     // Schedule updates
     scheduleUpdate: function() {
-        const interval = this.config.lowPowerMode ? 
-            this.config.updateInterval * 3 : 
+        const interval = this.config.lowPowerMode ?
+            this.config.updateInterval * 3 :
             this.config.updateInterval;
-            
+
         setInterval(() => {
             this.sendSocketNotification("GET_CURRENT_SONG");
         }, interval);
@@ -121,19 +121,19 @@ Module.register("MMM-POSpotify", {
             case "SONG_DATA":
                 this.processSongData(payload);
                 break;
-                
+
             case "PLAYER_STOPPED":
                 this.handlePlayerStopped();
                 break;
-                
+
             case "AUTH_ERROR":
                 this.showError("Authentication failed");
                 break;
-                
+
             case "API_ERROR":
                 Log.error("Spotify API Error:", payload);
                 break;
-                
+
             case "TOKEN_REFRESHED":
                 Log.info("Spotify token refreshed successfully");
                 break;
@@ -146,7 +146,7 @@ Module.register("MMM-POSpotify", {
             this.handlePlayerStopped();
             return;
         }
-        
+
         this.previousSong = this.currentSong;
         this.currentSong = {
             title: data.item.name,
@@ -163,22 +163,22 @@ Module.register("MMM-POSpotify", {
             id: data.item.id,
             uri: data.item.uri
         };
-        
+
         this.isPlaying = data.is_playing;
-        
+
         // Extract album colors if enabled
         if (this.config.useAlbumColors && this.currentSong.albumArt) {
             this.extractAlbumColors(this.currentSong.albumArt);
         }
-        
+
         // Send notifications if enabled
         if (this.config.enableNotifications) {
             this.sendNotification("SPOTIFY_UPDATE", this.currentSong);
         }
-        
+
         // Reset inactivity timer
         this.resetInactivityTimer();
-        
+
         // Update display
         this.updateDom(this.config.animationSpeed);
     },
@@ -186,24 +186,24 @@ Module.register("MMM-POSpotify", {
     // Get appropriate album art size
     getAlbumArt: function(images) {
         if (!images || images.length === 0) return null;
-        
+
         // Find closest size to configured size
         const targetSize = this.config.albumArtSize;
         let closest = images[0];
-        
+
         for (let img of images) {
             if (Math.abs(img.width - targetSize) < Math.abs(closest.width - targetSize)) {
                 closest = img;
             }
         }
-        
+
         return closest.url;
     },
 
     // Handle stopped player
     handlePlayerStopped: function() {
         this.isPlaying = false;
-        
+
         if (this.config.fadeWhenInactive) {
             this.startInactivityTimer();
         } else {
@@ -218,7 +218,7 @@ Module.register("MMM-POSpotify", {
             clearTimeout(this.inactivityTimer);
             this.inactivityTimer = null;
         }
-        
+
         // Remove inactive class
         const wrapper = document.getElementById(this.identifier);
         if (wrapper) {
@@ -228,7 +228,7 @@ Module.register("MMM-POSpotify", {
 
     startInactivityTimer: function() {
         this.resetInactivityTimer();
-        
+
         this.inactivityTimer = setTimeout(() => {
             const wrapper = document.getElementById(this.identifier);
             if (wrapper) {
@@ -250,7 +250,7 @@ Module.register("MMM-POSpotify", {
     // Apply extracted album colors
     applyAlbumColors: function() {
         if (!this.albumColors) return;
-        
+
         const wrapper = document.getElementById(this.identifier);
         if (wrapper) {
             wrapper.style.setProperty('--spotify-accent', this.albumColors.primary);
@@ -263,18 +263,18 @@ Module.register("MMM-POSpotify", {
     applyTheme: function() {
         const wrapper = document.getElementById(this.identifier);
         if (!wrapper) return;
-        
+
         // Remove all theme classes
         wrapper.classList.remove('theme-dark', 'theme-light', 'theme-glass', 'theme-auto');
-        
+
         // Add new theme class
         wrapper.classList.add(`theme-${this.config.theme}`);
-        
+
         // Set custom accent color
         if (!this.config.useAlbumColors) {
             wrapper.style.setProperty('--spotify-accent', this.config.accentColor);
         }
-        
+
         // Set font size
         wrapper.classList.add(`font-${this.config.fontSize}`);
     },
@@ -284,16 +284,16 @@ Module.register("MMM-POSpotify", {
         const wrapper = document.createElement("div");
         wrapper.id = this.identifier;
         wrapper.className = `spotify-wrapper display-${this.config.displayType}`;
-        
+
         if (this.config.backgroundBlur) {
             wrapper.classList.add("blur-background");
         }
-        
+
         // Show error if any
         if (this.error) {
             return this.createErrorDisplay(wrapper);
         }
-        
+
         // Show current song or empty state
         if (this.currentSong && this.isPlaying) {
             switch(this.config.displayType) {
@@ -319,21 +319,21 @@ Module.register("MMM-POSpotify", {
         if (this.config.showAlbumArt && this.currentSong.albumArt) {
             const artContainer = document.createElement("div");
             artContainer.className = "album-art-container";
-            
+
             const albumArt = document.createElement("img");
             albumArt.className = "album-art";
             albumArt.src = this.currentSong.albumArt;
             albumArt.style.width = this.config.albumArtSize + "px";
             albumArt.style.height = this.config.albumArtSize + "px";
-            
+
             artContainer.appendChild(albumArt);
             wrapper.appendChild(artContainer);
         }
-        
+
         // Info container
         const infoContainer = document.createElement("div");
         infoContainer.className = "info-container";
-        
+
         // Title
         const title = document.createElement("div");
         title.className = "song-title";
@@ -342,39 +342,39 @@ Module.register("MMM-POSpotify", {
             title.classList.add("scrolling");
         }
         infoContainer.appendChild(title);
-        
+
         // Artist
         const artist = document.createElement("div");
         artist.className = "song-artist";
         artist.textContent = this.truncateText(this.currentSong.artist, this.config.maxArtistLength);
         infoContainer.appendChild(artist);
-        
+
         // Progress bar
         if (this.config.showProgressBar) {
             const progressContainer = document.createElement("div");
             progressContainer.className = "progress-container";
-            
+
             const progressBar = document.createElement("div");
             progressBar.className = "progress-bar";
             progressBar.style.height = this.config.progressBarHeight + "px";
-            
+
             const progress = document.createElement("div");
             progress.className = "progress";
             progress.style.width = `${(this.currentSong.progress / this.currentSong.duration) * 100}%`;
-            
+
             progressBar.appendChild(progress);
             progressContainer.appendChild(progressBar);
             infoContainer.appendChild(progressContainer);
         }
-        
+
         wrapper.appendChild(infoContainer);
-        
+
         // Device icon
         if (this.config.showDeviceIcon && this.currentSong.device) {
             const deviceIcon = this.createDeviceIcon(this.currentSong.device.type);
             wrapper.appendChild(deviceIcon);
         }
-        
+
         return wrapper;
     },
 
@@ -382,40 +382,40 @@ Module.register("MMM-POSpotify", {
     createDetailedDisplay: function(wrapper) {
         // Similar to minimalist but with more info
         const display = this.createMinimalistDisplay(wrapper);
-        
+
         // Add album info
         const albumInfo = document.createElement("div");
         albumInfo.className = "album-info";
         albumInfo.textContent = this.currentSong.album;
-        
+
         const infoContainer = display.querySelector(".info-container");
         infoContainer.insertBefore(albumInfo, infoContainer.querySelector(".progress-container"));
-        
+
         // Add time info
         if (this.config.showProgressBar) {
             const timeInfo = document.createElement("div");
             timeInfo.className = "time-info";
-            
+
             const currentTime = this.formatTime(this.currentSong.progress);
             const totalTime = this.formatTime(this.currentSong.duration);
-            
+
             timeInfo.textContent = `${currentTime} / ${totalTime}`;
             infoContainer.appendChild(timeInfo);
         }
-        
+
         // Add playback controls if enabled
         if (this.config.showPlaybackControls) {
             const controls = this.createPlaybackControls();
             display.appendChild(controls);
         }
-        
+
         return display;
     },
 
     // Create compact display
     createCompactDisplay: function(wrapper) {
         wrapper.classList.add("horizontal-layout");
-        
+
         // Small album art
         if (this.config.showAlbumArt && this.currentSong.albumArt) {
             const albumArt = document.createElement("img");
@@ -423,26 +423,26 @@ Module.register("MMM-POSpotify", {
             albumArt.src = this.currentSong.albumArt;
             wrapper.appendChild(albumArt);
         }
-        
+
         // Compact info
         const info = document.createElement("div");
         info.className = "compact-info";
-        
+
         const songInfo = document.createElement("div");
         songInfo.className = "compact-song-info";
         songInfo.textContent = `${this.currentSong.title} • ${this.currentSong.artist}`;
-        
+
         info.appendChild(songInfo);
-        
+
         if (this.config.showProgressBar) {
             const progress = document.createElement("div");
             progress.className = "compact-progress";
             progress.style.width = `${(this.currentSong.progress / this.currentSong.duration) * 100}%`;
             info.appendChild(progress);
         }
-        
+
         wrapper.appendChild(info);
-        
+
         return wrapper;
     },
 
@@ -453,59 +453,59 @@ Module.register("MMM-POSpotify", {
             albumArt.className = "album-art-full";
             albumArt.src = this.currentSong.albumArt;
             wrapper.appendChild(albumArt);
-            
+
             // Overlay info
             const overlay = document.createElement("div");
             overlay.className = "cover-overlay";
-            
+
             const title = document.createElement("div");
             title.className = "overlay-title";
             title.textContent = this.currentSong.title;
-            
+
             const artist = document.createElement("div");
             artist.className = "overlay-artist";
             artist.textContent = this.currentSong.artist;
-            
+
             overlay.appendChild(title);
             overlay.appendChild(artist);
             wrapper.appendChild(overlay);
         }
-        
+
         return wrapper;
     },
 
     // Create empty state
     createEmptyState: function(wrapper) {
         wrapper.classList.add("empty-state");
-        
+
         if (this.config.showSpotifyLogo) {
             const logo = document.createElement("i");
             logo.className = "fab fa-spotify spotify-logo";
             logo.style.fontSize = this.config.logoSize + "px";
             wrapper.appendChild(logo);
         }
-        
+
         const message = document.createElement("div");
         message.className = "empty-message";
         message.textContent = "Not playing";
         wrapper.appendChild(message);
-        
+
         return wrapper;
     },
 
     // Create error display
     createErrorDisplay: function(wrapper) {
         wrapper.classList.add("error-state");
-        
+
         const icon = document.createElement("i");
         icon.className = "fas fa-exclamation-triangle error-icon";
         wrapper.appendChild(icon);
-        
+
         const message = document.createElement("div");
         message.className = "error-message";
         message.textContent = this.error;
         wrapper.appendChild(message);
-        
+
         return wrapper;
     },
 
@@ -513,7 +513,7 @@ Module.register("MMM-POSpotify", {
     createDeviceIcon: function(deviceType) {
         const icon = document.createElement("i");
         icon.className = "device-icon fas ";
-        
+
         switch(deviceType.toLowerCase()) {
             case "computer":
                 icon.className += "fa-desktop";
@@ -530,7 +530,7 @@ Module.register("MMM-POSpotify", {
             default:
                 icon.className += "fa-music";
         }
-        
+
         return icon;
     },
 
@@ -538,34 +538,34 @@ Module.register("MMM-POSpotify", {
     createPlaybackControls: function() {
         const controls = document.createElement("div");
         controls.className = "playback-controls";
-        
+
         const prevBtn = document.createElement("button");
         prevBtn.className = "control-btn";
         prevBtn.innerHTML = '<i class="fas fa-step-backward"></i>';
         prevBtn.addEventListener("click", () => {
             this.sendSocketNotification("PREVIOUS_TRACK");
         });
-        
+
         const playPauseBtn = document.createElement("button");
         playPauseBtn.className = "control-btn play-pause";
-        playPauseBtn.innerHTML = this.isPlaying ? 
-            '<i class="fas fa-pause"></i>' : 
+        playPauseBtn.innerHTML = this.isPlaying ?
+            '<i class="fas fa-pause"></i>' :
             '<i class="fas fa-play"></i>';
         playPauseBtn.addEventListener("click", () => {
             this.sendSocketNotification(this.isPlaying ? "PAUSE" : "PLAY");
         });
-        
+
         const nextBtn = document.createElement("button");
         nextBtn.className = "control-btn";
         nextBtn.innerHTML = '<i class="fas fa-step-forward"></i>';
         nextBtn.addEventListener("click", () => {
             this.sendSocketNotification("NEXT_TRACK");
         });
-        
+
         controls.appendChild(prevBtn);
         controls.appendChild(playPauseBtn);
         controls.appendChild(nextBtn);
-        
+
         return controls;
     },
 
@@ -594,19 +594,19 @@ Module.register("MMM-POSpotify", {
             case "SPOTIFY_PLAY":
                 this.sendSocketNotification("PLAY");
                 break;
-                
+
             case "SPOTIFY_PAUSE":
                 this.sendSocketNotification("PAUSE");
                 break;
-                
+
             case "SPOTIFY_NEXT":
                 this.sendSocketNotification("NEXT_TRACK");
                 break;
-                
+
             case "SPOTIFY_PREVIOUS":
                 this.sendSocketNotification("PREVIOUS_TRACK");
                 break;
-                
+
             case "SPOTIFY_VOLUME_UP":
             case "SPOTIFY_VOLUME_DOWN":
                 this.sendSocketNotification(notification, payload);
