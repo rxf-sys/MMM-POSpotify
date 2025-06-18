@@ -1,14 +1,15 @@
 /* MMM-POSpotify.js
  *
  * A modern, minimalist Spotify module for MagicMirror²
+ * Fixed version with smooth progress bar and static DOM
  *
- * By: Robin Frank
+ * By: rxf-sys
  * MIT Licensed.
  */
 
 Module.register("MMM-POSpotify", {
     defaults: {
-        updateInterval: 1000,           // Update every second
+        updateInterval: 5000,           // API update every 5 seconds
         animationSpeed: 500,            // Fade animation speed
         displayType: "minimalist",      // minimalist, detailed, compact, coverOnly
 
@@ -58,7 +59,7 @@ Module.register("MMM-POSpotify", {
     // Required styles
     getStyles: function() {
         return [
-            this.file("styles/MMM-POSpotify.css"),
+            this.file("MMM-POSpotify.css"),
             "font-awesome.css"
         ];
     },
@@ -66,7 +67,7 @@ Module.register("MMM-POSpotify", {
     // Required scripts
     getScripts: function() {
         return [
-            this.file("scripts/color-extractor.js")
+            this.file("color-extractor.js")
         ];
     },
 
@@ -81,6 +82,16 @@ Module.register("MMM-POSpotify", {
         this.inactivityTimer = null;
         this.albumColors = null;
         this.spotifyApi = null;
+
+        // Progress tracking
+        this.progressInterval = null;
+        this.lastProgressUpdate = 0;
+        this.currentProgress = 0;
+        this.currentDuration = 0;
+
+        // DOM elements cache
+        this.domCreated = false;
+        this.elements = {};
 
         // Validate config
         if (!this.config.clientID || !this.config.clientSecret) {
@@ -106,13 +117,14 @@ Module.register("MMM-POSpotify", {
 
     // Schedule updates
     scheduleUpdate: function() {
-        const interval = this.config.lowPowerMode ?
-            this.config.updateInterval * 3 :
-            this.config.updateInterval;
+        const interval = this.config.updateInterval;
 
         setInterval(() => {
             this.sendSocketNotification("GET_CURRENT_SONG");
         }, interval);
+
+        // Initial request
+        this.sendSocketNotification("GET_CURRENT_SONG");
     },
 
     // Socket notifications from node_helper
@@ -166,6 +178,11 @@ Module.register("MMM-POSpotify", {
 
         this.isPlaying = data.is_playing;
 
+        // Update progress tracking
+        this.currentProgress = data.progress_ms;
+        this.currentDuration = data.item.duration_ms;
+        this.lastProgressUpdate = Date.now();
+
         // Extract album colors if enabled
         if (this.config.useAlbumColors && this.currentSong.albumArt) {
             this.extractAlbumColors(this.currentSong.albumArt);
@@ -180,7 +197,123 @@ Module.register("MMM-POSpotify", {
         this.resetInactivityTimer();
 
         // Update display
-        this.updateDom(this.config.animationSpeed);
+        if (!this.domCreated) {
+            this.updateDom(this.config.animationSpeed);
+        } else {
+            this.updateContent();
+        }
+
+        // Start or restart progress animation
+        this.startProgressAnimation();
+    },
+
+    // Start smooth progress animation
+    startProgressAnimation: function() {
+        // Clear existing interval
+        if (this.progressInterval) {
+            clearInterval(this.progressInterval);
+        }
+
+        if (!this.isPlaying || !this.config.showProgressBar) {
+            return;
+        }
+
+        // Update progress every 100ms for smooth animation
+        this.progressInterval = setInterval(() => {
+            if (this.isPlaying && this.currentDuration > 0) {
+                const elapsed = Date.now() - this.lastProgressUpdate;
+                this.currentProgress = Math.min(
+                    this.currentProgress + elapsed,
+                    this.currentDuration
+                );
+                this.lastProgressUpdate = Date.now();
+
+                // Update progress bar
+                this.updateProgressBar();
+            }
+        }, 100);
+    },
+
+    // Update only the progress bar
+    updateProgressBar: function() {
+        if (this.elements.progress && this.currentDuration > 0) {
+            const percentage = (this.currentProgress / this.currentDuration) * 100;
+            this.elements.progress.style.width = `${percentage}%`;
+        }
+
+        if (this.elements.currentTime) {
+            this.elements.currentTime.textContent = this.formatTime(this.currentProgress);
+        }
+
+        if (this.elements.totalTime) {
+            this.elements.totalTime.textContent = this.formatTime(this.currentDuration);
+        }
+    },
+
+    // Update content without recreating DOM
+    updateContent: function() {
+        if (!this.currentSong || !this.domCreated) return;
+
+        // Update album art
+        if (this.elements.albumArt && this.currentSong.albumArt) {
+            if (this.elements.albumArt.src !== this.currentSong.albumArt) {
+                this.elements.albumArt.src = this.currentSong.albumArt;
+            }
+        }
+
+        // Update title
+        if (this.elements.title) {
+            const titleText = this.truncateText(this.currentSong.title, this.config.maxTitleLength);
+            if (this.elements.title.textContent !== titleText) {
+                this.elements.title.textContent = titleText;
+
+                // Update scrolling class
+                if (this.config.scrollLongText && this.currentSong.title.length > this.config.maxTitleLength) {
+                    this.elements.title.classList.add("scrolling");
+                } else {
+                    this.elements.title.classList.remove("scrolling");
+                }
+            }
+        }
+
+        // Update artist
+        if (this.elements.artist) {
+            const artistText = this.truncateText(this.currentSong.artist, this.config.maxArtistLength);
+            if (this.elements.artist.textContent !== artistText) {
+                this.elements.artist.textContent = artistText;
+            }
+        }
+
+        // Update album
+        if (this.elements.album) {
+            this.elements.album.textContent = this.currentSong.album;
+        }
+
+        // Update device icon
+        if (this.elements.deviceIcon && this.currentSong.device) {
+            const iconClass = this.getDeviceIconClass(this.currentSong.device.type);
+            this.elements.deviceIcon.className = `device-icon fas ${iconClass}`;
+        }
+
+        // Update playback controls
+        if (this.elements.playPauseBtn) {
+            this.elements.playPauseBtn.innerHTML = this.isPlaying ?
+                '<i class="fas fa-pause"></i>' :
+                '<i class="fas fa-play"></i>';
+        }
+
+        // Show/hide empty state
+        if (this.elements.wrapper) {
+            if (this.isPlaying) {
+                this.elements.wrapper.classList.remove("empty-state");
+                if (this.elements.emptyState) {
+                    this.elements.emptyState.style.display = "none";
+                }
+                if (this.elements.content) {
+                    this.elements.content.style.display = "";
+                }
+            }
+        }
     },
 
     // Get appropriate album art size
@@ -204,11 +337,24 @@ Module.register("MMM-POSpotify", {
     handlePlayerStopped: function() {
         this.isPlaying = false;
 
+        // Stop progress animation
+        if (this.progressInterval) {
+            clearInterval(this.progressInterval);
+            this.progressInterval = null;
+        }
+
         if (this.config.fadeWhenInactive) {
             this.startInactivityTimer();
         } else {
-            this.currentSong = null;
-            this.updateDom(this.config.animationSpeed);
+            if (this.domCreated && this.elements.content) {
+                this.elements.content.style.display = "none";
+                if (this.elements.emptyState) {
+                    this.elements.emptyState.style.display = "";
+                }
+            } else {
+                this.currentSong = null;
+                this.updateDom(this.config.animationSpeed);
+            }
         }
     },
 
@@ -279,8 +425,18 @@ Module.register("MMM-POSpotify", {
         wrapper.classList.add(`font-${this.config.fontSize}`);
     },
 
-    // DOM generation
+    // DOM generation - only called once or when structure changes
     getDom: function() {
+        // If DOM already created and no error, return existing wrapper
+        if (this.domCreated && !this.error) {
+            return document.getElementById(this.identifier) || this.createDOM();
+        }
+
+        return this.createDOM();
+    },
+
+    // Create the DOM structure once
+    createDOM: function() {
         const wrapper = document.createElement("div");
         wrapper.id = this.identifier;
         wrapper.className = `spotify-wrapper display-${this.config.displayType}`;
@@ -294,40 +450,61 @@ Module.register("MMM-POSpotify", {
             return this.createErrorDisplay(wrapper);
         }
 
-        // Show current song or empty state
-        if (this.currentSong && this.isPlaying) {
-            switch(this.config.displayType) {
-                case "minimalist":
-                    return this.createMinimalistDisplay(wrapper);
-                case "detailed":
-                    return this.createDetailedDisplay(wrapper);
-                case "compact":
-                    return this.createCompactDisplay(wrapper);
-                case "coverOnly":
-                    return this.createCoverOnlyDisplay(wrapper);
-                default:
-                    return this.createMinimalistDisplay(wrapper);
-            }
-        } else {
-            return this.createEmptyState(wrapper);
+        // Create structure based on display type
+        switch(this.config.displayType) {
+            case "minimalist":
+                this.createMinimalistStructure(wrapper);
+                break;
+            case "detailed":
+                this.createDetailedStructure(wrapper);
+                break;
+            case "compact":
+                this.createCompactStructure(wrapper);
+                break;
+            case "coverOnly":
+                this.createCoverOnlyStructure(wrapper);
+                break;
+            default:
+                this.createMinimalistStructure(wrapper);
         }
+
+        // Mark DOM as created
+        this.domCreated = true;
+
+        // Initial content update
+        if (this.currentSong && this.isPlaying) {
+            this.updateContent();
+            this.startProgressAnimation();
+        } else {
+            // Hide content, show empty state
+            if (this.elements.content) {
+                this.elements.content.style.display = "none";
+            }
+        }
+
+        return wrapper;
     },
 
-    // Create minimalist display
-    createMinimalistDisplay: function(wrapper) {
+    // Create minimalist display structure
+    createMinimalistStructure: function(wrapper) {
+        // Content container
+        const content = document.createElement("div");
+        content.className = "content-container";
+        this.elements.content = content;
+
         // Album art
-        if (this.config.showAlbumArt && this.currentSong.albumArt) {
+        if (this.config.showAlbumArt) {
             const artContainer = document.createElement("div");
             artContainer.className = "album-art-container";
 
             const albumArt = document.createElement("img");
             albumArt.className = "album-art";
-            albumArt.src = this.currentSong.albumArt;
             albumArt.style.width = this.config.albumArtSize + "px";
             albumArt.style.height = this.config.albumArtSize + "px";
+            this.elements.albumArt = albumArt;
 
             artContainer.appendChild(albumArt);
-            wrapper.appendChild(artContainer);
+            content.appendChild(artContainer);
         }
 
         // Info container
@@ -337,16 +514,13 @@ Module.register("MMM-POSpotify", {
         // Title
         const title = document.createElement("div");
         title.className = "song-title";
-        title.textContent = this.truncateText(this.currentSong.title, this.config.maxTitleLength);
-        if (this.config.scrollLongText && this.currentSong.title.length > this.config.maxTitleLength) {
-            title.classList.add("scrolling");
-        }
+        this.elements.title = title;
         infoContainer.appendChild(title);
 
         // Artist
         const artist = document.createElement("div");
         artist.className = "song-artist";
-        artist.textContent = this.truncateText(this.currentSong.artist, this.config.maxArtistLength);
+        this.elements.artist = artist;
         infoContainer.appendChild(artist);
 
         // Progress bar
@@ -360,68 +534,139 @@ Module.register("MMM-POSpotify", {
 
             const progress = document.createElement("div");
             progress.className = "progress";
-            progress.style.width = `${(this.currentSong.progress / this.currentSong.duration) * 100}%`;
+            this.elements.progress = progress;
 
             progressBar.appendChild(progress);
             progressContainer.appendChild(progressBar);
             infoContainer.appendChild(progressContainer);
         }
 
-        wrapper.appendChild(infoContainer);
+        content.appendChild(infoContainer);
 
         // Device icon
-        if (this.config.showDeviceIcon && this.currentSong.device) {
-            const deviceIcon = this.createDeviceIcon(this.currentSong.device.type);
-            wrapper.appendChild(deviceIcon);
+        if (this.config.showDeviceIcon) {
+            const deviceIcon = document.createElement("i");
+            deviceIcon.className = "device-icon fas";
+            this.elements.deviceIcon = deviceIcon;
+            content.appendChild(deviceIcon);
         }
 
-        return wrapper;
+        wrapper.appendChild(content);
+
+        // Empty state
+        this.createEmptyState(wrapper);
+
+        // Store wrapper reference
+        this.elements.wrapper = wrapper;
     },
 
-    // Create detailed display
-    createDetailedDisplay: function(wrapper) {
-        // Similar to minimalist but with more info
-        const display = this.createMinimalistDisplay(wrapper);
+    // Create detailed display structure
+    createDetailedStructure: function(wrapper) {
+        // Content container
+        const content = document.createElement("div");
+        content.className = "content-container detailed-content";
+        this.elements.content = content;
 
-        // Add album info
-        const albumInfo = document.createElement("div");
-        albumInfo.className = "album-info";
-        albumInfo.textContent = this.currentSong.album;
+        // Album art
+        if (this.config.showAlbumArt) {
+            const albumArt = document.createElement("img");
+            albumArt.className = "album-art";
+            this.elements.albumArt = albumArt;
+            content.appendChild(albumArt);
+        }
 
-        const infoContainer = display.querySelector(".info-container");
-        infoContainer.insertBefore(albumInfo, infoContainer.querySelector(".progress-container"));
+        // Info container
+        const infoContainer = document.createElement("div");
+        infoContainer.className = "info-container";
 
-        // Add time info
+        // Title
+        const title = document.createElement("div");
+        title.className = "song-title";
+        this.elements.title = title;
+        infoContainer.appendChild(title);
+
+        // Artist
+        const artist = document.createElement("div");
+        artist.className = "song-artist";
+        this.elements.artist = artist;
+        infoContainer.appendChild(artist);
+
+        // Album
+        const album = document.createElement("div");
+        album.className = "album-info";
+        this.elements.album = album;
+        infoContainer.appendChild(album);
+
+        // Progress bar
         if (this.config.showProgressBar) {
+            const progressContainer = document.createElement("div");
+            progressContainer.className = "progress-container";
+
+            const progressBar = document.createElement("div");
+            progressBar.className = "progress-bar";
+            progressBar.style.height = this.config.progressBarHeight + "px";
+
+            const progress = document.createElement("div");
+            progress.className = "progress";
+            this.elements.progress = progress;
+
+            progressBar.appendChild(progress);
+            progressContainer.appendChild(progressBar);
+            infoContainer.appendChild(progressContainer);
+
+            // Time info
             const timeInfo = document.createElement("div");
             timeInfo.className = "time-info";
 
-            const currentTime = this.formatTime(this.currentSong.progress);
-            const totalTime = this.formatTime(this.currentSong.duration);
+            const currentTime = document.createElement("span");
+            currentTime.className = "current-time";
+            this.elements.currentTime = currentTime;
 
-            timeInfo.textContent = `${currentTime} / ${totalTime}`;
+            const separator = document.createElement("span");
+            separator.textContent = " / ";
+
+            const totalTime = document.createElement("span");
+            totalTime.className = "total-time";
+            this.elements.totalTime = totalTime;
+
+            timeInfo.appendChild(currentTime);
+            timeInfo.appendChild(separator);
+            timeInfo.appendChild(totalTime);
             infoContainer.appendChild(timeInfo);
         }
 
-        // Add playback controls if enabled
+        content.appendChild(infoContainer);
+
+        // Playback controls
         if (this.config.showPlaybackControls) {
-            const controls = this.createPlaybackControls();
-            display.appendChild(controls);
+            const controls = this.createPlaybackControlsStructure();
+            content.appendChild(controls);
         }
 
-        return display;
+        wrapper.appendChild(content);
+
+        // Empty state
+        this.createEmptyState(wrapper);
+
+        // Store wrapper reference
+        this.elements.wrapper = wrapper;
     },
 
-    // Create compact display
-    createCompactDisplay: function(wrapper) {
+    // Create compact display structure
+    createCompactStructure: function(wrapper) {
         wrapper.classList.add("horizontal-layout");
 
+        // Content container
+        const content = document.createElement("div");
+        content.className = "content-container compact-content";
+        this.elements.content = content;
+
         // Small album art
-        if (this.config.showAlbumArt && this.currentSong.albumArt) {
+        if (this.config.showAlbumArt) {
             const albumArt = document.createElement("img");
             albumArt.className = "album-art-small";
-            albumArt.src = this.currentSong.albumArt;
-            wrapper.appendChild(albumArt);
+            this.elements.albumArt = albumArt;
+            content.appendChild(albumArt);
         }
 
         // Compact info
@@ -430,67 +675,83 @@ Module.register("MMM-POSpotify", {
 
         const songInfo = document.createElement("div");
         songInfo.className = "compact-song-info";
-        songInfo.textContent = `${this.currentSong.title} • ${this.currentSong.artist}`;
-
+        this.elements.songInfo = songInfo;
         info.appendChild(songInfo);
 
         if (this.config.showProgressBar) {
             const progress = document.createElement("div");
             progress.className = "compact-progress";
-            progress.style.width = `${(this.currentSong.progress / this.currentSong.duration) * 100}%`;
+            this.elements.progress = progress;
             info.appendChild(progress);
         }
 
-        wrapper.appendChild(info);
+        content.appendChild(info);
+        wrapper.appendChild(content);
 
-        return wrapper;
+        // Empty state
+        this.createEmptyState(wrapper);
+
+        // Store wrapper reference
+        this.elements.wrapper = wrapper;
     },
 
-    // Create cover only display
-    createCoverOnlyDisplay: function(wrapper) {
-        if (this.currentSong.albumArt) {
-            const albumArt = document.createElement("img");
-            albumArt.className = "album-art-full";
-            albumArt.src = this.currentSong.albumArt;
-            wrapper.appendChild(albumArt);
+    // Create cover only display structure
+    createCoverOnlyStructure: function(wrapper) {
+        // Content container
+        const content = document.createElement("div");
+        content.className = "content-container cover-content";
+        this.elements.content = content;
 
-            // Overlay info
-            const overlay = document.createElement("div");
-            overlay.className = "cover-overlay";
+        const albumArt = document.createElement("img");
+        albumArt.className = "album-art-full";
+        this.elements.albumArt = albumArt;
+        content.appendChild(albumArt);
 
-            const title = document.createElement("div");
-            title.className = "overlay-title";
-            title.textContent = this.currentSong.title;
+        // Overlay info
+        const overlay = document.createElement("div");
+        overlay.className = "cover-overlay";
 
-            const artist = document.createElement("div");
-            artist.className = "overlay-artist";
-            artist.textContent = this.currentSong.artist;
+        const title = document.createElement("div");
+        title.className = "overlay-title";
+        this.elements.title = title;
 
-            overlay.appendChild(title);
-            overlay.appendChild(artist);
-            wrapper.appendChild(overlay);
-        }
+        const artist = document.createElement("div");
+        artist.className = "overlay-artist";
+        this.elements.artist = artist;
 
-        return wrapper;
+        overlay.appendChild(title);
+        overlay.appendChild(artist);
+        content.appendChild(overlay);
+
+        wrapper.appendChild(content);
+
+        // Empty state
+        this.createEmptyState(wrapper);
+
+        // Store wrapper reference
+        this.elements.wrapper = wrapper;
     },
 
     // Create empty state
     createEmptyState: function(wrapper) {
-        wrapper.classList.add("empty-state");
+        const emptyState = document.createElement("div");
+        emptyState.className = "empty-state-container";
+        emptyState.style.display = "none";
 
         if (this.config.showSpotifyLogo) {
             const logo = document.createElement("i");
             logo.className = "fab fa-spotify spotify-logo";
             logo.style.fontSize = this.config.logoSize + "px";
-            wrapper.appendChild(logo);
+            emptyState.appendChild(logo);
         }
 
         const message = document.createElement("div");
         message.className = "empty-message";
         message.textContent = "Not playing";
-        wrapper.appendChild(message);
+        emptyState.appendChild(message);
 
-        return wrapper;
+        this.elements.emptyState = emptyState;
+        wrapper.appendChild(emptyState);
     },
 
     // Create error display
@@ -509,33 +770,24 @@ Module.register("MMM-POSpotify", {
         return wrapper;
     },
 
-    // Create device icon
-    createDeviceIcon: function(deviceType) {
-        const icon = document.createElement("i");
-        icon.className = "device-icon fas ";
-
+    // Get device icon class
+    getDeviceIconClass: function(deviceType) {
         switch(deviceType.toLowerCase()) {
             case "computer":
-                icon.className += "fa-desktop";
-                break;
+                return "fa-desktop";
             case "smartphone":
-                icon.className += "fa-mobile-alt";
-                break;
+                return "fa-mobile-alt";
             case "speaker":
-                icon.className += "fa-volume-up";
-                break;
+                return "fa-volume-up";
             case "tv":
-                icon.className += "fa-tv";
-                break;
+                return "fa-tv";
             default:
-                icon.className += "fa-music";
+                return "fa-music";
         }
-
-        return icon;
     },
 
-    // Create playback controls
-    createPlaybackControls: function() {
+    // Create playback controls structure
+    createPlaybackControlsStructure: function() {
         const controls = document.createElement("div");
         controls.className = "playback-controls";
 
@@ -548,12 +800,10 @@ Module.register("MMM-POSpotify", {
 
         const playPauseBtn = document.createElement("button");
         playPauseBtn.className = "control-btn play-pause";
-        playPauseBtn.innerHTML = this.isPlaying ?
-            '<i class="fas fa-pause"></i>' :
-            '<i class="fas fa-play"></i>';
         playPauseBtn.addEventListener("click", () => {
             this.sendSocketNotification(this.isPlaying ? "PAUSE" : "PLAY");
         });
+        this.elements.playPauseBtn = playPauseBtn;
 
         const nextBtn = document.createElement("button");
         nextBtn.className = "control-btn";
@@ -567,6 +817,14 @@ Module.register("MMM-POSpotify", {
         controls.appendChild(nextBtn);
 
         return controls;
+    },
+
+    // Update compact display info
+    updateCompactInfo: function() {
+        if (this.elements.songInfo && this.currentSong) {
+            this.elements.songInfo.textContent =
+                `${this.currentSong.title} • ${this.currentSong.artist}`;
+        }
     },
 
     // Helper functions
@@ -585,6 +843,7 @@ Module.register("MMM-POSpotify", {
 
     showError: function(message) {
         this.error = message;
+        this.domCreated = false; // Force DOM recreation for error
         this.updateDom();
     },
 
@@ -611,6 +870,23 @@ Module.register("MMM-POSpotify", {
             case "SPOTIFY_VOLUME_DOWN":
                 this.sendSocketNotification(notification, payload);
                 break;
+        }
+    },
+
+    // Clean up when module is hidden
+    suspend: function() {
+        // Stop progress animation when module is hidden
+        if (this.progressInterval) {
+            clearInterval(this.progressInterval);
+            this.progressInterval = null;
+        }
+    },
+
+    // Resume when module is shown again
+    resume: function() {
+        // Restart progress animation if playing
+        if (this.isPlaying) {
+            this.startProgressAnimation();
         }
     }
 });

@@ -1,6 +1,6 @@
 {
   "name": "mmm-pospotify",
-  "version": "2.0.0",
+  "version": "1.0.0",
   "description": "A modern Spotify module for MagicMirror²",
   "main": "MMM-POSpotify.js",
   "scripts": {
@@ -19,8 +19,12 @@
     "music",
     "now playing"
   ],
-  "author": "Robin Frank",
+  "author": "rxf-sys",
   "license": "MIT",
+    "bugs": {
+    "url": "https://github.com/rxf-sys/MMM-POSpotify/issues"
+  },
+  "homepage": "https://github.com/rxf-sys/MMM-POSpotify#readme",
   "dependencies": {
     "spotify-web-api-node": "^5.0.2",
     "express": "^4.18.2"
